@@ -23,7 +23,7 @@ It demonstrates **real-time + batch processing, scalable microservices, and poly
 ```mermaid
 flowchart TD
     subgraph Batch["Batch Ingestion"]
-        IMDb[IMDb TSV Files] --> SparkETL[Spark ETL Service]
+        IMDb[IMDb data] --> SparkETL[Spark ETL Service]
         SparkETL --> Iceberg[Iceberg Lakehouse]
         AirflowDAG[Airflow DAG] --> SparkETL
         AirflowDAG --> Iceberg

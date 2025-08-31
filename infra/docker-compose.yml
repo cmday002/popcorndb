@@ -1,0 +1,120 @@
+version: "3.8"
+
+services:
+  # Hive Metastore for Iceberg catalog
+  hive-metastore:
+    image: apache/hive:3.1.3
+    container_name: hive-metastore
+    environment:
+      DB_DRIVER: mysql
+      DB_HOST: mysql
+      DB_NAME: metastore
+      DB_USER: hive
+      DB_PASS: hive
+    ports:
+      - "9083:9083"
+    depends_on:
+      - mysql
+    volumes:
+      - hive-metastore-data:/opt/hive/data
+    networks:
+      - popcorndb-network
+
+  # MySQL for Hive Metastore
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: metastore
+      MYSQL_USER: hive
+      MYSQL_PASSWORD: hive
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - popcorndb-network
+
+  # Spark ETL Service
+  spark-etl:
+    build:
+      context: ../services/spark-etl
+      dockerfile: Dockerfile
+    container_name: spark-etl
+    environment:
+      - IMDB_DATA_PATH=/opt/data/raw
+      - SPARK_DRIVER_MEMORY=2g
+      - SPARK_EXECUTOR_MEMORY=2g
+    volumes:
+      - ../services/spark-etl/jobs:/opt/spark-apps/jobs
+      - ../services/spark-etl/config:/opt/spark-apps/config
+      - ../services/spark-etl/scripts:/opt/spark-apps/scripts
+      - imdb-data:/opt/data
+      - warehouse-data:/opt/data/warehouse
+    ports:
+      - "4040:4040" # Spark UI
+      - "7077:7077" # Spark master
+    depends_on:
+      - hive-metastore
+    networks:
+      - popcorndb-network
+    command: ["tail", "-f", "/dev/null"]
+    # Ensure proper user mapping
+    user: "1000:1000"
+
+  # Apache Airflow for orchestration
+  airflow-webserver:
+    image: apache/airflow:2.7.1
+    container_name: airflow-webserver
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ../services/spark-etl:/opt/airflow/dags/spark-etl
+      - warehouse-data:/opt/data/warehouse
+    ports:
+      - "8080:8080"
+    depends_on:
+      - hive-metastore
+    networks:
+      - popcorndb-network
+    command: ["webserver"]
+
+  # Airflow Scheduler
+  airflow-scheduler:
+    image: apache/airflow:2.7.1
+    container_name: airflow-scheduler
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=sqlite:////opt/airflow/airflow.db
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    volumes:
+      - ../services/spark-etl:/opt/airflow/dags/spark-etl
+      - warehouse-data:/opt/data/warehouse
+    depends_on:
+      - hive-metastore
+    networks:
+      - popcorndb-network
+    command: ["scheduler"]
+
+volumes:
+  hive-metastore-data:
+  mysql-data:
+  imdb-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/../services/spark-etl/data
+  warehouse-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/../services/spark-etl/warehouse
+
+networks:
+  popcorndb-network:
+    driver: bridge
