@@ -64,7 +64,7 @@ def load_name_basics(spark, data_path):
     )
     
     # Write to Iceberg table
-    df_clean.writeTo("iceberg.name_basics").using("iceberg").createOrReplace()
+    df_clean.writeTo("iceberg.default.name_basics").using("iceberg").createOrReplace()
     
     print(f"Loaded {df_clean.count()} records into name_basics table")
     return df_clean
@@ -102,7 +102,7 @@ def load_title_basics(spark, data_path):
     )
     
     # Write to Iceberg table
-    df_clean.writeTo("iceberg.title_basics").using("iceberg").createOrReplace()
+    df_clean.writeTo("iceberg.default.title_basics").using("iceberg").createOrReplace()
     
     print(f"Loaded {df_clean.count()} records into title_basics table")
     return df_clean
