@@ -1,0 +1,11 @@
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# Optional: ignore all outputs
+*.nbconvert.ipynb
+
+# Data files
+data/
+
+# Virtual environment files
+.venv/
