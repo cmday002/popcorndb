@@ -160,7 +160,7 @@ docker exec rating-simulator python simulate_ratings.py
 | Feature                                                | Status  |
 | ------------------------------------------------------ | ------- |
 | Batch ingestion pipeline (Spark → Iceberg)             | ✅ Done |
-| Streaming pipeline (Kafka → Flink → Cassandra/Iceberg) | ✅ Done |
+| Streaming pipeline (Kafka → Flink → Cassandra/Iceberg) | ⬜ Todo |
 | FastAPI Metadata + Analytics APIs                      | ⬜ Todo |
 | DataJunction semantic metrics                          | ⬜ Todo |
 | Superset dashboards                                    | ⬜ Todo |
