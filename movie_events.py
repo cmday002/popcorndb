@@ -2,9 +2,11 @@ import json
 import time
 import random
 from kafka import KafkaProducer
+import pandas as pd
 
-# Load your top 100 movies
-movies = ["Inception", "The Dark Knight", "Interstellar"]  # list of 100
+movies_df = pd.read_csv("notebooks/top_100_movies.csv", header=None)
+
+movies = movies_df[0].tolist()
 
 producer = KafkaProducer(
     bootstrap_servers='localhost:9092',
@@ -14,7 +16,6 @@ producer = KafkaProducer(
 user_count = 10000  # number of simulated users
 
 while True:
-    movie_title = random.choice(movies)
     event = {
         "user_id": f"user_{random.randint(1, user_count)}",
         "movie_title": random.choice(movies),
@@ -22,5 +23,5 @@ while True:
         "timestamp": int(time.time())
     }
     producer.send("movie-events", value=event)
-    print(f"{event}")
-    time.sleep(1)  # ~100 events per second
+    print(event)
+    time.sleep(0.01)  # ~100 events per second
