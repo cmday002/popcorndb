@@ -35,3 +35,11 @@ start generating events
 ```
 python movie_events.py
 ```
+
+```
+docker exec -it flink bash
+```
+
+```
+bin/flink run -py /opt/flink-jobs/flink.py
+```
