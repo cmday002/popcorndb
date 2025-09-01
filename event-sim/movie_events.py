@@ -4,7 +4,7 @@ import random
 from kafka import KafkaProducer
 import pandas as pd
 
-movies_df = pd.read_csv("notebooks/top_100_movies.csv", header=None)
+movies_df = pd.read_csv("notebooks/top_10_movies.csv", header=None)
 
 movies = movies_df[0].tolist()
 
@@ -24,4 +24,4 @@ while True:
     }
     producer.send("movie-events", value=event)
     print(event)
-    time.sleep(0.01)  # ~100 events per second
+    # time.sleep(0.01)  # ~100 events per second
