@@ -39,6 +39,7 @@ python movie_events.py
 ```
 docker exec -it flink bash
 
+pip install --no-cache-dir apache-flink==1.19.*
 pip install google
 pip install google-api-core
 
