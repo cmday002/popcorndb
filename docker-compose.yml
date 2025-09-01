@@ -31,6 +31,8 @@ services:
       - ./flink-jobs/flink.py:/opt/flink-jobs/flink.py
       - ./jars/flink-connector-kafka-3.0.1-1.18.jar:/opt/flink/lib/flink-connector-kafka-3.0.1-1.18.jar
       - ./jars/kafka-clients-3.5.1.jar:/opt/flink/lib/kafka-clients-3.5.1.jar
+      - ./jars/postgresql-42.6.0.jar:/opt/flink/lib/postgresql-42.6.0.jar
+      - ./jars/flink-connector-jdbc_2.12-1.14.6.jar:/opt/flink/lib/flink-connector-jdbc_2.12-1.14.6.jar
     command: bash -c "bin/start-cluster.sh && tail -f /dev/null"
 
   postgres:

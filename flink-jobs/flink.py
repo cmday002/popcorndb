@@ -3,6 +3,8 @@ from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitial
 from pyflink.common.serialization import SimpleStringSchema
 from pyflink.common.watermark_strategy import WatermarkStrategy
 from pyflink.datastream import ReduceFunction
+from pyflink.table import StreamTableEnvironment
+
 import json
 
 
@@ -38,6 +40,31 @@ def main():
 
     # Print real-time counts
     ds.print()
+
+    table_name = 'movie_counts'
+    sink_ddl = f"""
+        CREATE TABLE {table_name} (
+            movie_title VARCHAR,
+            watcher_count bigint
+        ) WITH (
+            'connector' = 'jdbc',
+            'url' = 'jdbc:postgresql://postgres:5432/mydb',
+            'table-name' = '{table_name}',
+            'username' = 'admin',
+            'password' = 'secret',
+            'driver' = 'org.postgresql.Driver'
+        );
+    """
+    t_env = StreamTableEnvironment.create(env)
+    t_env.execute_sql(sink_ddl)
+    print('loading into postgres')
+
+    t_env.execute_sql(
+        f"""
+            INSERT INTO {table_name}
+            SELECT 'test', 1
+        """
+    ).wait()
 
     env.execute("Real-Time Movie Watch Analytics")
 
