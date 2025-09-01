@@ -24,4 +24,4 @@ while True:
     }
     producer.send("movie-events", value=event)
     print(event)
-    # time.sleep(0.01)  # ~100 events per second
+    time.sleep(0.01)  # ~100 events per second
