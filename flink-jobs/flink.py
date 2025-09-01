@@ -1,73 +1,59 @@
 from pyflink.datastream import StreamExecutionEnvironment
-from pyflink.datastream.connectors.kafka import KafkaSource, KafkaOffsetsInitializer
-from pyflink.common.serialization import SimpleStringSchema
-from pyflink.common.watermark_strategy import WatermarkStrategy
-from pyflink.datastream import ReduceFunction
 from pyflink.table import StreamTableEnvironment
 
-import json
+# ------------------------------
+# 1️⃣ Set up the Flink environment
+# ------------------------------
+env = StreamExecutionEnvironment.get_execution_environment()
+env.set_parallelism(1)
 
+t_env = StreamTableEnvironment.create(env)
 
-def main():
-    env = StreamExecutionEnvironment.get_execution_environment()
+# ------------------------------
+# 2️⃣ Define Kafka source table
+# ------------------------------
+t_env.execute_sql("""
+CREATE TABLE movie_events (
+    user_id STRING,
+    movie_title STRING,
+    event_type STRING,
+    `timestamp` BIGINT,
+    ts AS TO_TIMESTAMP_LTZ(`timestamp`, 3),
+    WATERMARK FOR ts AS ts - INTERVAL '5' SECOND
+) WITH (
+    'connector' = 'kafka',
+    'topic' = 'movie-events',
+    'properties.bootstrap.servers' = 'broker:29092',
+    'properties.group.id' = 'flink_movie_group',
+    'scan.startup.mode' = 'latest-offset',
+    'format' = 'json'
+)
+""")
 
-    env.enable_checkpointing(10 * 1000)
+# ------------------------------
+# 3️⃣ Define Postgres sink table
+# ------------------------------
+t_env.execute_sql("""
+CREATE TABLE movie_counts (
+    movie_title STRING PRIMARY KEY NOT ENFORCED,
+    watchers BIGINT
+) WITH (
+    'connector' = 'jdbc',
+    'url' = 'jdbc:postgresql://postgres:5432/mydb',
+    'table-name' = 'movie_counts',
+    'username' = 'admin',
+    'password' = 'secret'
+)
+""")
 
-    # Kafka Source with proper deserializer
-    source = KafkaSource.builder() \
-        .set_bootstrap_servers("broker:29092") \
-        .set_group_id("movie-consumer") \
-        .set_topics("movie-events") \
-        .set_starting_offsets(KafkaOffsetsInitializer.earliest()) \
-        .set_value_only_deserializer(SimpleStringSchema()) \
-        .build()
-
-    ds = env.from_source(
-        source, WatermarkStrategy.no_watermarks(), "Kafka Source")
-
-    # Parse JSON
-    ds = ds.map(lambda e: json.loads(e))
-
-    # Map to {movie_title, count}
-    ds = ds.map(lambda e: {"movie_title": e["movie_title"], "count": 1})
-
-    # Reduce counts per movie
-    class CountReducer(ReduceFunction):
-        def reduce(self, a, b):
-            return {"movie_title": a["movie_title"], "count": a["count"] + b["count"]}
-
-    ds = ds.key_by(lambda e: e["movie_title"]).reduce(CountReducer())
-
-    # Print real-time counts
-    ds.print()
-
-    table_name = 'movie_counts'
-    sink_ddl = f"""
-        CREATE TABLE {table_name} (
-            movie_title VARCHAR,
-            watcher_count bigint
-        ) WITH (
-            'connector' = 'jdbc',
-            'url' = 'jdbc:postgresql://postgres:5432/mydb',
-            'table-name' = '{table_name}',
-            'username' = 'admin',
-            'password' = 'secret',
-            'driver' = 'org.postgresql.Driver'
-        );
-    """
-    t_env = StreamTableEnvironment.create(env)
-    t_env.execute_sql(sink_ddl)
-    print('loading into postgres')
-
-    t_env.execute_sql(
-        f"""
-            INSERT INTO {table_name}
-            SELECT 'test', 1
-        """
-    ).wait()
-
-    env.execute("Real-Time Movie Watch Analytics")
-
-
-if __name__ == "__main__":
-    main()
+# ------------------------------
+# 4️⃣ Define streaming aggregation
+# ------------------------------
+t_env.execute_sql("""
+INSERT INTO movie_counts
+SELECT
+    movie_title,
+    COUNT(user_id) AS watchers
+FROM movie_events
+GROUP BY movie_title
+""")

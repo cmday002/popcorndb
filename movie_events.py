@@ -22,5 +22,5 @@ while True:
         "timestamp": int(time.time())
     }
     producer.send("movie-events", value=event)
-    print(f"someone started watching {movie_title}")
+    print(f"{event}")
     time.sleep(1)  # ~100 events per second
