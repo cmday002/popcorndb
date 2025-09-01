@@ -32,3 +32,31 @@ services:
       - ./jars/flink-connector-kafka-3.0.1-1.18.jar:/opt/flink/lib/flink-connector-kafka-3.0.1-1.18.jar
       - ./jars/kafka-clients-3.5.1.jar:/opt/flink/lib/kafka-clients-3.5.1.jar
     command: bash -c "bin/start-cluster.sh && tail -f /dev/null"
+
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: secret
+    ports:
+      - "5050:80" # host:container
+    depends_on:
+      - postgres
+
+volumes:
+  postgres_data:
