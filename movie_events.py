@@ -20,7 +20,7 @@ while True:
         "user_id": f"user_{random.randint(1, user_count)}",
         "movie_title": random.choice(movies),
         "event_type": "watch",
-        "timestamp": int(time.time())
+        "timestamp": int(time.time() * 1000)
     }
     producer.send("movie-events", value=event)
     print(event)

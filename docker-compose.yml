@@ -27,6 +27,8 @@ services:
     container_name: flink
     ports:
       - "8081:8081"
+    environment:
+      - TASK_MANAGER_NUMBER_OF_TASK_SLOTS=4
     volumes:
       - ./flink-jobs/flink.py:/opt/flink-jobs/flink.py
       - ./jars/flink-connector-kafka-3.0.1-1.18.jar:/opt/flink/lib/flink-connector-kafka-3.0.1-1.18.jar

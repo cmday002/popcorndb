@@ -2,7 +2,7 @@ from pyflink.datastream import StreamExecutionEnvironment
 from pyflink.table import StreamTableEnvironment
 
 # ------------------------------
-# 1️⃣ Set up the Flink environment
+# Set up the Flink environment
 # ------------------------------
 env = StreamExecutionEnvironment.get_execution_environment()
 env.set_parallelism(1)
@@ -10,7 +10,7 @@ env.set_parallelism(1)
 t_env = StreamTableEnvironment.create(env)
 
 # ------------------------------
-# 2️⃣ Define Kafka source table
+# Define Kafka source table
 # ------------------------------
 t_env.execute_sql("""
 CREATE TABLE movie_events (
@@ -31,7 +31,7 @@ CREATE TABLE movie_events (
 """)
 
 # ------------------------------
-# 3️⃣ Define Postgres sink table
+# Define Postgres sink tables
 # ------------------------------
 t_env.execute_sql("""
 CREATE TABLE movie_counts (
@@ -46,8 +46,24 @@ CREATE TABLE movie_counts (
 )
 """)
 
+t_env.execute_sql("""
+CREATE TABLE movie_counts_time_series (
+    movie_title STRING NOT NULL,
+    window_start TIMESTAMP(3) NOT NULL,
+    watchers BIGINT,
+    PRIMARY KEY (movie_title, window_start) NOT ENFORCED
+) WITH (
+    'connector' = 'jdbc',
+    'url' = 'jdbc:postgresql://postgres:5432/mydb',
+    'table-name' = 'movie_counts_time_series',
+    'username' = 'admin',
+    'password' = 'secret',
+    'driver' = 'org.postgresql.Driver'
+)
+""")
+
 # ------------------------------
-# 4️⃣ Define streaming aggregation
+# Define streaming aggregations
 # ------------------------------
 t_env.execute_sql("""
 INSERT INTO movie_counts
@@ -56,4 +72,16 @@ SELECT
     COUNT(user_id) AS watchers
 FROM movie_events
 GROUP BY movie_title
+""")
+
+t_env.execute_sql("""
+INSERT INTO movie_counts_time_series
+SELECT
+    movie_title,
+    TUMBLE_START(ts, INTERVAL '1' SECOND) AS window_start,
+    COUNT(user_id) AS watchers
+FROM movie_events
+GROUP BY
+    movie_title,
+    TUMBLE(ts, INTERVAL '1' SECOND)
 """)
