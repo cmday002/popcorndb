@@ -1,0 +1,5 @@
+{
+  "python.formatting.provider": "black",
+  "editor.formatOnSave": true,
+  "nbqa.black.args": ["--line-length", "88"]
+}
