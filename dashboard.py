@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import psycopg2
-import time
+import plotly.express as px
+from streamlit_autorefresh import st_autorefresh
 
 # ------------------------------
 # Postgres connection
@@ -10,70 +11,74 @@ conn = psycopg2.connect(
     dbname="mydb",
     user="admin",
     password="secret",
-    host="localhost",  # use 'localhost' if running locally, 'postgres' if in Docker
+    host="localhost",  # use 'postgres' if running inside Docker
     port=5432
 )
 
-st.set_page_config(page_title="Movie Watchers Dashboard", layout="wide")
-st.title("Real-Time Movie Watchers")
+st.set_page_config(page_title="Event Dashboard", layout="wide")
+st.title("Real-Time Event Watchers Dashboard")
 
 # ------------------------------
-# Select movies to display
+# Select movies/events to monitor
 # ------------------------------
 movies_to_display = st.multiselect(
-    "Select movies to monitor",
-    options=[
-        "Inception",
-        "The Dark Knight",
-        "Interstellar",
-        "Spirited Away",
-        "American Beauty",
-        "Spider-Man: No Way Home",
-        "The Good, the Bad and the Ugly"
-    ],
-    default=[
-        "Inception",
-        "Spirited Away"
-    ]
+    "Select movies/events to monitor",
+    options=["UFC Fight", "NFL Game", "Taylor Swift Concert"],
+    default=["UFC Fight", "NFL Game", "Taylor Swift Concert"]
 )
 
 # ------------------------------
-# Live chart update
+# Refresh interval
 # ------------------------------
-chart_placeholder = st.empty()
-total_placeholder = st.empty()  # For total watchers
+refresh_interval = st.slider(
+    "Refresh interval (milliseconds)", 100, 5000, 1000)
 
-refresh_interval = st.slider("Refresh interval (seconds)", 1, 5, 1)
+# ------------------------------
+# Auto-refresh Streamlit every `refresh_interval` milliseconds
+# ------------------------------
+st_autorefresh(interval=refresh_interval, limit=None, key="auto_refresh")
 
-while True:
-    if not movies_to_display:
-        st.warning("Select at least one movie to display.")
-        time.sleep(refresh_interval)
-        continue
-
-    # Query latest data from Postgres
-    query = f"""
+# ------------------------------
+# Time series line chart
+# ------------------------------
+if movies_to_display:
+    query_line = """
         SELECT window_start, movie_title, watchers
         FROM movie_counts_time_series
         WHERE movie_title = ANY(%s)
         ORDER BY window_start ASC
         LIMIT 500
     """
-    df = pd.read_sql(query, conn, params=(movies_to_display,))
+    df_line = pd.read_sql(query_line, conn, params=(movies_to_display,))
 
-    if not df.empty:
-        # Pivot for Streamlit line chart
-        chart_data = df.pivot(index="window_start",
-                              columns="movie_title", values="watchers")
-        chart_placeholder.line_chart(chart_data)
+    if not df_line.empty:
+        # Pivot for line chart
+        chart_data = df_line.pivot(
+            index="window_start",
+            columns="movie_title",
+            values="watchers"
+        )
+        st.line_chart(chart_data)
 
-        # Show total watchers across all selected movies (latest window)
-        latest_window = df[df['window_start'] == df['window_start'].max()]
+        # Show total watchers for selected events
+        latest_window = df_line[df_line['window_start']
+                                == df_line['window_start'].max()]
         total_watchers = latest_window['watchers'].sum()
-        total_placeholder.metric(
-            "Total Watchers (selected movies)", total_watchers)
+        st.metric("Total Watchers (selected events)", total_watchers)
     else:
-        chart_placeholder.write("No data yet...")
-        total_placeholder.write("Total Watchers (selected movies): 0")
+        st.write("No data yet for selected events.")
+else:
+    st.warning("Select at least one movie/event to display.")
 
-    time.sleep(refresh_interval)
+# ------------------------------
+# Pie chart for all events
+# ------------------------------
+query_pie = "SELECT movie_title, watchers FROM movie_counts"
+df_pie = pd.read_sql(query_pie, conn)
+
+if not df_pie.empty:
+    fig = px.pie(df_pie, names='movie_title', values='watchers',
+                 title='Watchers Share per Event')
+    st.plotly_chart(fig)  # No key needed
+else:
+    st.write("No data available for pie chart yet.")

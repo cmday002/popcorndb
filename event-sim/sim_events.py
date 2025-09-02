@@ -4,9 +4,7 @@ import random
 from kafka import KafkaProducer
 import pandas as pd
 
-movies_df = pd.read_csv("notebooks/top_10_movies.csv", header=None)
-
-movies = movies_df[0].tolist()
+events = ['UFC Fight', 'NFL Game', 'Taylor Swift Concert']
 
 producer = KafkaProducer(
     bootstrap_servers='localhost:9092',
@@ -18,7 +16,7 @@ user_count = 10000  # number of simulated users
 while True:
     event = {
         "user_id": f"user_{random.randint(1, user_count)}",
-        "movie_title": random.choice(movies),
+        "movie_title": random.choice(events),
         "event_type": "watch",
         "timestamp": int(time.time() * 1000)
     }
