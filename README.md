@@ -6,6 +6,35 @@ start the kafka broker
 docker-compose up -d
 ```
 
+sql tables
+
+```sql
+CREATE TABLE IF NOT EXISTS public.movie_counts
+(
+    movie_title text COLLATE pg_catalog."default" NOT NULL,
+    watchers bigint,
+    CONSTRAINT movie_counts_pkey PRIMARY KEY (movie_title)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.movie_counts
+    OWNER to admin;
+
+CREATE TABLE IF NOT EXISTS public.movie_counts_time_series
+(
+    movie_title character varying COLLATE pg_catalog."default" NOT NULL,
+    window_start timestamp without time zone NOT NULL,
+    watchers bigint,
+    CONSTRAINT movie_counts_time_series_pkey PRIMARY KEY (movie_title, window_start)
+)
+
+TABLESPACE pg_default;
+
+ALTER TABLE IF EXISTS public.movie_counts_time_series
+    OWNER to admin;
+```
+
 shell into the kafka broker container
 
 ```

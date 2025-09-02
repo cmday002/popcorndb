@@ -1,9 +1,7 @@
-# dashboard_real_time_synced_plotly.py
 import streamlit as st
 import pandas as pd
 import psycopg2
-import plotly.express as px
-from streamlit_autorefresh import st_autorefresh
+import time
 
 # ------------------------------
 # Postgres connection
@@ -12,90 +10,105 @@ conn = psycopg2.connect(
     dbname="mydb",
     user="admin",
     password="secret",
-    host="localhost",  # 'postgres' if in Docker
+    host="localhost",  # use 'localhost' if running locally, 'postgres' if in Docker
     port=5432
 )
 
-st.set_page_config(page_title="Movie Watchers Dashboard", layout="wide")
-st.title("Real-Time Movie Watchers Dashboard")
+st.set_page_config(page_title="Watchers Dashboard", layout="wide")
+st.title("Real-Time Watchers")
 
 # ------------------------------
-# User selections
+# Select movies to display
 # ------------------------------
 movies_to_display = st.multiselect(
-    "Select movies/events to monitor",
-    options=["UFC Fight", "NFL Game", "Taylor Swift Concert"],
-    default=["UFC Fight", "NFL Game", "Taylor Swift Concert"]
+    "Select movies to monitor",
+    options=[
+        "NFL Game",
+        "UFC Fight",
+        "Taylor Swift Concert"
+    ],
+    default=[
+        "NFL Game",
+        "UFC Fight",
+        "Taylor Swift Concert"
+    ]
 )
 
 # ------------------------------
-# Refresh interval
+# Live chart update
 # ------------------------------
-refresh_interval = st.slider(
-    "Refresh interval (milliseconds)", 100, 5000, 1000)
+st.subheader("Total Viewers")
+chart_placeholder = st.empty()
 
-# ------------------------------
-# Auto-refresh page
-# ------------------------------
-st_autorefresh(interval=refresh_interval, limit=None, key="auto_refresh")
+st.subheader("Viewership Gain/Loss")
+total_placeholder = st.empty()
 
-# ------------------------------
-# Color map for consistent colors
-# ------------------------------
-color_map = {
-    "UFC Fight": "#636EFA",           # blue
-    "NFL Game": "#EF553B",            # red
-    "Taylor Swift Concert": "#00CC96"  # green
-}
+st.subheader("10 Second Moving Average")
+placeholder_3 = st.empty()
 
-# ------------------------------
-# Side-by-side layout
-# ------------------------------
-col1, col2 = st.columns([3, 2])  # line chart 60%, pie chart 40%
+refresh_interval = st.slider("Refresh interval (seconds)", 1, 5, 1)
 
-# ------------------------------
-# Line chart with Plotly (explicit colors)
-# ------------------------------
-if movies_to_display:
-    query_line = """
+while True:
+    if not movies_to_display:
+        st.warning("Select at least one movie to display.")
+        time.sleep(refresh_interval)
+        continue
+
+    # Query latest data from Postgres
+    query = f"""
         SELECT window_start, movie_title, watchers
         FROM movie_counts_time_series
         WHERE movie_title = ANY(%s)
         ORDER BY window_start ASC
-        LIMIT 500
     """
-    df_line = pd.read_sql(query_line, conn, params=(movies_to_display,))
-    if not df_line.empty:
-        fig_line = px.line(
-            df_line,
-            x='window_start',
-            y='watchers',
-            color='movie_title',
-            color_discrete_map=color_map,
-            title='Watchers Over Time'
-        )
-        col1.plotly_chart(fig_line)
-    else:
-        col1.write("No data yet for selected events.")
-else:
-    st.warning("Select at least one movie/event to display.")
+    df = pd.read_sql(query, conn, params=(movies_to_display,))
 
-# ------------------------------
-# Pie chart with synced colors
-# ------------------------------
-df_pie = pd.read_sql("SELECT movie_title, watchers FROM movie_counts", conn)
-if not df_pie.empty:
-    # Filter to selected events to match line chart
-    if movies_to_display:
-        df_pie = df_pie[df_pie['movie_title'].isin(movies_to_display)]
-    fig_pie = px.pie(
-        df_pie,
-        names='movie_title',
-        values='watchers',
-        title='Watchers Share per Event',
-        color='movie_title',
-        color_discrete_map=color_map
-    )
-    col2.plotly_chart(fig_pie)
-else:
-    col2.write("No data available for pie chart yet.")
+    # Query total data from Postgres
+    query_cumulative = f"""
+        SELECT window_start
+            , movie_title
+            , coalesce(watchers
+            - lag(watchers) over (
+                partition by movie_title
+                order by window_start), 0) watchers
+        FROM movie_counts_time_series
+        WHERE movie_title = ANY(%s)
+        ORDER BY window_start ASC
+    """
+    df_cumulative = pd.read_sql(
+        query_cumulative, conn, params=(movies_to_display,))
+
+    # Query total data from Postgres
+    query_3 = f"""
+        SELECT window_start
+            , movie_title
+            , cast(avg(watchers) over (
+                partition by movie_title
+                order by window_start
+                rows between 10 preceding and current row) as int) watchers
+        FROM movie_counts_time_series
+        WHERE movie_title = ANY(%s)
+        ORDER BY window_start ASC
+    """
+    df_3 = pd.read_sql(query_3, conn, params=(movies_to_display,))
+
+    if not df.empty:
+        # Pivot for Streamlit line chart
+        chart_data = df.pivot(index="window_start",
+                              columns="movie_title", values="watchers")
+        chart_placeholder.line_chart(chart_data)
+        # Pivot for Streamlit line chart
+        chart_data_total = df_cumulative.pivot(index="window_start",
+                                               columns="movie_title", values="watchers")
+        total_placeholder.line_chart(chart_data_total)
+        # Pivot for Streamlit line chart
+        chart_data_3 = df_3.pivot(index="window_start",
+                                  columns="movie_title", values="watchers")
+        placeholder_3.line_chart(chart_data_3)
+
+    else:
+        chart_placeholder.write("No data yet...")
+        total_placeholder.write("No data yet...")
+        placeholder_3.write("No data yet...")
+
+    time.sleep(refresh_interval)

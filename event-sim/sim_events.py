@@ -1,7 +1,6 @@
 import json
 import time
 import random
-import math
 from kafka import KafkaProducer
 from multiprocessing import Process
 
@@ -18,24 +17,37 @@ def produce_events(event_name: str, traffic_pattern: str):
     start_time = time.time()
 
     while True:
-        now = time.time() - start_time
+        elapsed = time.time() - start_time
 
-        # Pick traffic behavior
-        if traffic_pattern == "spiky":
-            # Random short bursts: sometimes fast, sometimes slow
-            sleep_time = random.choice([0.005, 0.01, 0.2])
+        # --- UFC Fight ---
+        if traffic_pattern == "ufc":
+            # Start high ~30/s, then decline after 20s
+            if elapsed < 20:
+                rate = random.normalvariate(30, 5)  # avg 30/s
+            else:
+                # Decline linearly to ~5/s by 60s
+                decline_factor = max(0, 1 - (elapsed - 20) / 40)
+                rate = random.normalvariate(30 * decline_factor, 3)
+            sleep_time = 1.0 / max(1, rate)
 
-        elif traffic_pattern == "noisy":
-            # Around 50ms but with some noise
-            sleep_time = max(0.01, random.normalvariate(0.05, 0.02))
+        # --- NFL Game ---
+        elif traffic_pattern == "nfl":
+            # Steady ~20/s, then spike to ~40/s at 30s
+            if elapsed < 30:
+                rate = random.normalvariate(20, 3)
+            else:
+                rate = random.normalvariate(40, 5)
+            sleep_time = 1.0 / max(1, rate)
 
-        elif traffic_pattern == "parabolic":
-            # Rate starts slow, speeds up, then slows again (parabola)
-            peak_time = 60  # 1 minute to peak
-            scale = abs((now - peak_time) / peak_time)
-            sleep_time = 0.01 + scale * 0.2  # very fast near peak, slower at edges
+        # --- Taylor Swift Concert ---
+        elif traffic_pattern == "taylor":
+            # Linear growth from 10/s → 60/s over 60s
+            growth = min(1.0, elapsed / 60.0)  # 0 → 1
+            rate = random.normalvariate(10 + 50 * growth, 4)
+            sleep_time = 1.0 / max(1, rate)
+
         else:
-            sleep_time = 0.05
+            sleep_time = 0.05  # fallback
 
         # Send event
         event = {
@@ -46,14 +58,15 @@ def produce_events(event_name: str, traffic_pattern: str):
         }
         producer.send("movie-events", value=event)
         print(f"[{event_name}] {event}")
+
         time.sleep(sleep_time)
 
 
 if __name__ == "__main__":
     event_configs = [
-        ("UFC Fight", "spiky"),
-        ("NFL Game", "noisy"),
-        ("Taylor Swift Concert", "parabolic"),
+        ("UFC Fight", "ufc"),
+        ("NFL Game", "nfl"),
+        ("Taylor Swift Concert", "taylor"),
     ]
 
     processes = []
