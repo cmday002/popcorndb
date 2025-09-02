@@ -1,39 +1,61 @@
+# dashboard_real_time_synced_plotly.py
 import streamlit as st
 import pandas as pd
 import psycopg2
 import plotly.express as px
 from streamlit_autorefresh import st_autorefresh
 
+# ------------------------------
 # Postgres connection
+# ------------------------------
 conn = psycopg2.connect(
     dbname="mydb",
     user="admin",
     password="secret",
-    host="localhost",
+    host="localhost",  # 'postgres' if in Docker
     port=5432
 )
 
 st.set_page_config(page_title="Movie Watchers Dashboard", layout="wide")
 st.title("Real-Time Movie Watchers Dashboard")
 
-# Select movies/events
+# ------------------------------
+# User selections
+# ------------------------------
 movies_to_display = st.multiselect(
     "Select movies/events to monitor",
     options=["UFC Fight", "NFL Game", "Taylor Swift Concert"],
     default=["UFC Fight", "NFL Game", "Taylor Swift Concert"]
 )
 
+# ------------------------------
 # Refresh interval
+# ------------------------------
 refresh_interval = st.slider(
     "Refresh interval (milliseconds)", 100, 5000, 1000)
 
-# Auto-refresh the page
+# ------------------------------
+# Auto-refresh page
+# ------------------------------
 st_autorefresh(interval=refresh_interval, limit=None, key="auto_refresh")
 
-# Side-by-side columns
-col1, col2, col3 = st.columns([3, 1, 2])
+# ------------------------------
+# Color map for consistent colors
+# ------------------------------
+color_map = {
+    "UFC Fight": "#636EFA",           # blue
+    "NFL Game": "#EF553B",            # red
+    "Taylor Swift Concert": "#00CC96"  # green
+}
 
-# --- Line chart ---
+# ------------------------------
+# Side-by-side layout
+# ------------------------------
+col1, col2 = st.columns([3, 2])  # line chart 60%, pie chart 40%
+
+# ------------------------------
+# Line chart with Plotly (explicit colors)
+# ------------------------------
 if movies_to_display:
     query_line = """
         SELECT window_start, movie_title, watchers
@@ -44,27 +66,36 @@ if movies_to_display:
     """
     df_line = pd.read_sql(query_line, conn, params=(movies_to_display,))
     if not df_line.empty:
-        chart_data = df_line.pivot(
-            index="window_start", columns="movie_title", values="watchers")
-        col1.line_chart(chart_data)
-
-        latest_window = df_line[df_line['window_start']
-                                == df_line['window_start'].max()]
-        total_watchers = latest_window['watchers'].sum()
-        col2.metric("Total Watchers (selected events)", total_watchers)
+        fig_line = px.line(
+            df_line,
+            x='window_start',
+            y='watchers',
+            color='movie_title',
+            color_discrete_map=color_map,
+            title='Watchers Over Time'
+        )
+        col1.plotly_chart(fig_line)
     else:
         col1.write("No data yet for selected events.")
-        col2.write("Total Watchers: 0")
 else:
     st.warning("Select at least one movie/event to display.")
 
-# --- Pie chart ---
-query_pie = "SELECT movie_title, watchers FROM movie_counts"
-df_pie = pd.read_sql(query_pie, conn)
-
+# ------------------------------
+# Pie chart with synced colors
+# ------------------------------
+df_pie = pd.read_sql("SELECT movie_title, watchers FROM movie_counts", conn)
 if not df_pie.empty:
-    fig = px.pie(df_pie, names='movie_title', values='watchers',
-                 title="Watchers Share per Event")
-    col3.plotly_chart(fig)  # No key needed
+    # Filter to selected events to match line chart
+    if movies_to_display:
+        df_pie = df_pie[df_pie['movie_title'].isin(movies_to_display)]
+    fig_pie = px.pie(
+        df_pie,
+        names='movie_title',
+        values='watchers',
+        title='Watchers Share per Event',
+        color='movie_title',
+        color_discrete_map=color_map
+    )
+    col2.plotly_chart(fig_pie)
 else:
-    col3.write("No data available for pie chart yet.")
+    col2.write("No data available for pie chart yet.")
