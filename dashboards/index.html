@@ -258,55 +258,6 @@
       // Original commentData format (individual frame entries)
       var commentData = [];
 
-      // Function to convert commentData to timeSeriesData format
-      function convertCommentDataToTimeSeries(commentData) {
-        // Group data by point ID
-        const groupedData = {};
-
-        commentData.forEach((item) => {
-          const pointId = item.comment_id;
-
-          if (!groupedData[pointId]) {
-            groupedData[pointId] = {
-              id: pointId,
-              category: item.cluster_id,
-              value: item.body,
-              startFrame: parseInt(item.startFrame),
-              endFrame: parseInt(item.endFrame),
-              frames: [],
-            };
-          }
-
-          // Add frame data
-          groupedData[pointId].frames.push({
-            x: parseFloat(item.position_x),
-            y: parseFloat(item.position_y),
-          });
-        });
-
-        // Convert to array and sort frames by frame number
-        return Object.values(groupedData).map((point) => {
-          // Sort frames by the original frame order
-          point.frames.sort((a, b, index) => {
-            const aFrame = commentData.find(
-              (item) =>
-                item.comment_id === point.id &&
-                item.position_x === a.x.toString() &&
-                item.position_y === a.y.toString()
-            );
-            const bFrame = commentData.find(
-              (item) =>
-                item.comment_id === point.id &&
-                item.position_x === b.x.toString() &&
-                item.position_y === b.y.toString()
-            );
-            return parseInt(aFrame.window_id) - parseInt(bFrame.window_id);
-          });
-
-          return point;
-        });
-      }
-
       // Alternative function for frame-based data without explicit start/end frames
       // This would work with data like:
       // [
@@ -318,6 +269,9 @@
       //   // ... more frames
       // ]
       function convertFrameBasedDataToTimeSeries(frameBasedData) {
+        // Filter noise
+        frameBasedData = frameBasedData.filter((d) => d.cluster_id !== "-1");
+
         // Group data by point ID
         const groupedData = {};
 
@@ -441,8 +395,7 @@
           .attr("y", 0 - margin.left)
           .attr("x", 0 - height / 2)
           .attr("dy", "1em")
-          .style("text-anchor", "middle")
-          .text("Y Value");
+          .style("text-anchor", "middle");
 
         g.append("text")
           .attr("class", "axis-label")
@@ -450,8 +403,7 @@
             "transform",
             `translate(${width / 2}, ${height + margin.bottom - 10})`
           )
-          .style("text-anchor", "middle")
-          .text("X Value");
+          .style("text-anchor", "middle");
 
         // Create tooltip
         const tooltip = d3.select("#tooltip");
@@ -737,12 +689,11 @@
           .attr("y", 20)
           .attr("text-anchor", "middle")
           .style("font-size", "16px")
-          .style("font-weight", "bold")
-          .text("Comment Clusters Over Time");
+          .style("font-weight", "bold");
       }
 
       // Load data and create chart
-      Papa.parse("clustered_comments_2.csv", {
+      Papa.parse("data/comments.csv", {
         download: true,
         header: true,
         complete: function (results) {
