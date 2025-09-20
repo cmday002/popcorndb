@@ -199,13 +199,13 @@
   </head>
   <body>
     <div id="container">
-      <h1>Comment Clusters Visualization</h1>
+      <h1>Comments</h1>
 
       <!-- Animation Controls -->
       <div id="controls">
-        <button id="playPauseBtn">Play</button>
-        <button id="prevFrameBtn">←</button>
-        <button id="nextFrameBtn">→</button>
+        <button id="prevFrameBtn">◀</button>
+        <button id="playPauseBtn">▶</button>
+        <button id="nextFrameBtn">▶</button>
         <div id="timeline">
           <label for="frameSlider">Window:</label>
           <input
@@ -342,6 +342,15 @@
           .attr("height", height + margin.top + margin.bottom);
 
         // Create main group
+        // Create clipping path to hide points outside chart area
+        const defs = svg.append("defs");
+        defs
+          .append("clipPath")
+          .attr("id", "chart-clip")
+          .append("rect")
+          .attr("width", width)
+          .attr("height", height);
+
         const g = svg
           .append("g")
           .attr("transform", `translate(${margin.left},${margin.top})`);
@@ -358,6 +367,32 @@
           .domain(d3.extent(allFrames, (d) => d.y))
           .range([height, 0])
           .nice();
+
+        // Create zoom behavior
+        const zoom = d3
+          .zoom()
+          .scaleExtent([0.1, 10])
+          .on("zoom", function (event) {
+            // Update scales based on zoom transform
+            const { transform } = event;
+            const newXScale = transform.rescaleX(xScale);
+            const newYScale = transform.rescaleY(yScale);
+
+            // Update axes
+            g.select(".x-axis").call(d3.axisBottom(newXScale));
+            g.select(".y-axis").call(d3.axisLeft(newYScale));
+
+            // Update all dots with new positions
+            dotsGroup.selectAll(".dot").each(function (d) {
+              const frameIndex = currentFrame - d.startFrame;
+              if (frameIndex >= 0 && frameIndex < d.frames.length) {
+                const frameData = d.frames[frameIndex];
+                d3.select(this)
+                  .attr("cx", newXScale(frameData.x))
+                  .attr("cy", newYScale(frameData.y));
+              }
+            });
+          });
 
         // Create color scale for categories (cluster IDs) - gradient from dark purple to bright yellow
         const clusterIds = timeSeriesData
@@ -381,12 +416,18 @@
 
         // Add x-axis
         g.append("g")
-          .attr("class", "axis")
+          .attr("class", "axis x-axis")
           .attr("transform", `translate(0,${height})`)
           .call(xAxis);
 
         // Add y-axis
-        g.append("g").attr("class", "axis").call(yAxis);
+        g.append("g").attr("class", "axis y-axis").call(yAxis);
+
+        // Create a separate group for dots with clipping
+        const dotsGroup = g.append("g").attr("clip-path", "url(#chart-clip)");
+
+        // Apply zoom behavior to the SVG
+        svg.call(zoom);
 
         // Add axis labels
         g.append("text")
@@ -409,7 +450,7 @@
         const tooltip = d3.select("#tooltip");
 
         // Create dots container (will be populated dynamically)
-        let dots = g.selectAll(".dot");
+        let dots = dotsGroup.selectAll(".dot");
 
         // Function to get active points at a specific frame
         function getActivePointsAtFrame(frame) {
@@ -426,7 +467,9 @@
           activePoints.textContent = `Active Comments: ${activePointsData.length}`;
 
           // Bind data with ID as key function
-          dots = g.selectAll(".dot").data(activePointsData, (d) => d.id);
+          dots = dotsGroup
+            .selectAll(".dot")
+            .data(activePointsData, (d) => d.id);
 
           // Remove points that are no longer active
           dots.exit().transition().duration(300).style("opacity", 0).remove();
@@ -449,9 +492,15 @@
             .each(function (d) {
               const frameIndex = frame - d.startFrame;
               const frameData = d.frames[frameIndex];
+
+              // Get current zoom transform
+              const transform = d3.zoomTransform(svg.node());
+              const currentXScale = transform.rescaleX(xScale);
+              const currentYScale = transform.rescaleY(yScale);
+
               d3.select(this)
-                .attr("cx", xScale(frameData.x))
-                .attr("cy", yScale(frameData.y));
+                .attr("cx", currentXScale(frameData.x))
+                .attr("cy", currentYScale(frameData.y));
             })
             .on("mouseover", function (event, d) {
               const element = d3.select(this);
@@ -469,11 +518,7 @@
                 .style("opacity", 1)
                 .html(
                   `
-                  <div><strong>Comment ID:</strong> ${d.id}</div>
-                  <div><strong>Cluster ID:</strong> ${d.category}</div>
-                  <div><strong>Body:</strong> ${d.value}</div>
-                  <div><strong>Window:</strong> ${frame}</div>
-                  <div><strong>Lifespan:</strong> ${d.startFrame}-${d.endFrame}</div>
+                  <div>${d.value}</div>
                 `
                 )
                 .style("left", event.pageX + 10 + "px")
@@ -539,7 +584,7 @@
         // Function to update opacity based on selected cluster
         function updateClusterOpacity(selectedClusterId) {
           // Get all circle elements in the DOM and check each one
-          const circles = g.node().querySelectorAll("circle.dot");
+          const circles = dotsGroup.node().querySelectorAll("circle.dot");
 
           circles.forEach(function (circleElement) {
             const d3Element = d3.select(circleElement);
@@ -554,7 +599,7 @@
 
         // Function to reset all cluster opacity
         function resetClusterOpacity() {
-          const circles = g.node().querySelectorAll("circle.dot");
+          const circles = dotsGroup.node().querySelectorAll("circle.dot");
 
           circles.forEach(function (circleElement) {
             const d3Element = d3.select(circleElement);
@@ -624,14 +669,14 @@
 
         function playAnimation() {
           isPlaying = true;
-          playPauseBtn.textContent = "Pause";
+          playPauseBtn.textContent = "⏸";
           playPauseBtn.classList.add("playing");
           continueAnimation();
         }
 
         function pauseAnimation() {
           isPlaying = false;
-          playPauseBtn.textContent = "Play";
+          playPauseBtn.textContent = "▶";
           playPauseBtn.classList.remove("playing");
           if (animationTimeout) {
             clearTimeout(animationTimeout);
