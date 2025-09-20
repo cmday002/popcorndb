@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>D3 Scatter Plot</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        margin: 0;
+        padding: 20px;
+        background-color: #f8f9fa;
+      }
+
+      #container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+      }
+
+      h1 {
+        color: #333;
+        margin-bottom: 10px;
+      }
+
+      svg {
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .axis {
+        font-size: 12px;
+      }
+
+      .axis-label {
+        font-size: 14px;
+        font-weight: 500;
+      }
+
+      .dot {
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .dot:hover {
+        stroke: #333;
+        stroke-width: 2px;
+        r: 4;
+      }
+
+      #tooltip {
+        position: absolute;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        border-radius: 5px;
+        pointer-events: none;
+        opacity: 0;
+        font-size: 12px;
+        line-height: 1.4;
+        z-index: 1000;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+      }
+
+      #tooltip div {
+        margin: 2px 0;
+      }
+
+      /* Animation Controls Styling */
+      #controls {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        margin-bottom: 20px;
+        padding: 15px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        flex-wrap: wrap;
+      }
+
+      #playPauseBtn {
+        padding: 8px 16px;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: background-color 0.2s ease;
+      }
+
+      #playPauseBtn:hover {
+        background-color: #0056b3;
+      }
+
+      #playPauseBtn.playing {
+        background-color: #dc3545;
+      }
+
+      #playPauseBtn.playing:hover {
+        background-color: #c82333;
+      }
+
+      #prevFrameBtn,
+      #nextFrameBtn {
+        padding: 8px 12px;
+        background-color: #6c757d;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        transition: background-color 0.2s ease;
+        min-width: 40px;
+      }
+
+      #prevFrameBtn:hover,
+      #nextFrameBtn:hover {
+        background-color: #5a6268;
+      }
+
+      #prevFrameBtn:disabled,
+      #nextFrameBtn:disabled {
+        background-color: #adb5bd;
+        cursor: not-allowed;
+      }
+
+      #timeline,
+      #speedControl {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      #timeline label,
+      #speedControl label {
+        font-size: 12px;
+        font-weight: 500;
+        color: #666;
+        min-width: 40px;
+      }
+
+      #frameSlider {
+        width: 300px;
+        height: 6px;
+        border-radius: 3px;
+        background: #ddd;
+        outline: none;
+        cursor: pointer;
+      }
+
+      #speedSlider {
+        width: 150px;
+        height: 6px;
+        border-radius: 3px;
+        background: #ddd;
+        outline: none;
+        cursor: pointer;
+      }
+
+      #frameSlider::-webkit-slider-thumb,
+      #speedSlider::-webkit-slider-thumb {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #007bff;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      #frameSlider::-moz-range-thumb,
+      #speedSlider::-moz-range-thumb {
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: #007bff;
+        cursor: pointer;
+        border: 2px solid white;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+      }
+
+      #frameCounter,
+      #speedValue {
+        font-size: 12px;
+        font-weight: 500;
+        color: #666;
+        min-width: 60px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <h1>Comment Clusters Visualization</h1>
+
+      <!-- Animation Controls -->
+      <div id="controls">
+        <button id="playPauseBtn">Play</button>
+        <button id="prevFrameBtn">←</button>
+        <button id="nextFrameBtn">→</button>
+        <div id="timeline">
+          <label for="frameSlider">Window:</label>
+          <input
+            type="range"
+            id="frameSlider"
+            min="1"
+            max="509"
+            value="1"
+            step="1"
+          />
+          <span id="frameCounter">1 / 509</span>
+        </div>
+        <div id="speedControl">
+          <label for="speedSlider">Speed:</label>
+          <input
+            type="range"
+            id="speedSlider"
+            min="50"
+            max="1000"
+            value="200"
+            step="50"
+          />
+          <span id="speedValue">200ms</span>
+        </div>
+        <div id="pointCounter">
+          <span id="activePoints">Active Comments: 0</span>
+        </div>
+        <div id="frameJump">
+          <label for="frameInput">Jump to:</label>
+          <input
+            type="number"
+            id="frameInput"
+            min="1"
+            max="509"
+            value="1"
+            style="width: 60px; margin: 0 5px"
+          />
+          <button id="jumpBtn">Go</button>
+        </div>
+      </div>
+
+      <div id="chart"></div>
+    </div>
+    <div id="tooltip"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script type="module">
+      import * as d3 from "https://cdn.jsdelivr.net/npm/d3@7/+esm";
+
+      // Original commentData format (individual frame entries)
+      var commentData = [];
+
+      // Function to convert commentData to timeSeriesData format
+      function convertCommentDataToTimeSeries(commentData) {
+        // Group data by point ID
+        const groupedData = {};
+
+        commentData.forEach((item) => {
+          const pointId = item.comment_id;
+
+          if (!groupedData[pointId]) {
+            groupedData[pointId] = {
+              id: pointId,
+              category: item.cluster_id,
+              value: item.body,
+              startFrame: parseInt(item.startFrame),
+              endFrame: parseInt(item.endFrame),
+              frames: [],
+            };
+          }
+
+          // Add frame data
+          groupedData[pointId].frames.push({
+            x: parseFloat(item.position_x),
+            y: parseFloat(item.position_y),
+          });
+        });
+
+        // Convert to array and sort frames by frame number
+        return Object.values(groupedData).map((point) => {
+          // Sort frames by the original frame order
+          point.frames.sort((a, b, index) => {
+            const aFrame = commentData.find(
+              (item) =>
+                item.comment_id === point.id &&
+                item.position_x === a.x.toString() &&
+                item.position_y === a.y.toString()
+            );
+            const bFrame = commentData.find(
+              (item) =>
+                item.comment_id === point.id &&
+                item.position_x === b.x.toString() &&
+                item.position_y === b.y.toString()
+            );
+            return parseInt(aFrame.window_id) - parseInt(bFrame.window_id);
+          });
+
+          return point;
+        });
+      }
+
+      // Alternative function for frame-based data without explicit start/end frames
+      // This would work with data like:
+      // [
+      //   { comment_id: "point-1", cluster_id: "A", body: "15", window_id: "0", position_x: "10", position_y: "20" },
+      //   { comment_id: "point-1", cluster_id: "A", body: "15", window_id: "1", position_x: "20", position_y: "25" },
+      //   { comment_id: "point-1", cluster_id: "A", body: "15", window_id: "2", position_x: "30", position_y: "30" },
+      //   { comment_id: "point-2", cluster_id: "B", body: "25", window_id: "1", position_x: "15", position_y: "35" },
+      //   { comment_id: "point-2", cluster_id: "B", body: "25", window_id: "2", position_x: "25", position_y: "40" },
+      //   // ... more frames
+      // ]
+      function convertFrameBasedDataToTimeSeries(frameBasedData) {
+        // Group data by point ID
+        const groupedData = {};
+
+        frameBasedData.forEach((item) => {
+          const pointId = item.comment_id;
+
+          if (!groupedData[pointId]) {
+            groupedData[pointId] = {
+              id: pointId,
+              category: item.cluster_id,
+              value: item.body,
+              frames: [],
+              frameNumbers: [], // Track which frames this point appears in
+            };
+          }
+
+          // Add frame data with frame number
+          groupedData[pointId].frames.push({
+            x: parseFloat(item.position_x),
+            y: parseFloat(item.position_y),
+          });
+
+          // Track frame numbers
+          groupedData[pointId].frameNumbers.push(parseInt(item.window_id));
+        });
+
+        // Convert to array and calculate start/end frames
+        return Object.values(groupedData).map((point) => {
+          // Sort frames by frame number
+          const sortedIndices = point.frameNumbers
+            .map((frameNum, index) => ({ frameNum, index }))
+            .sort((a, b) => a.frameNum - b.frameNum);
+
+          // Reorder frames array based on sorted frame numbers
+          const sortedFrames = sortedIndices.map(
+            (item) => point.frames[item.index]
+          );
+          point.frames = sortedFrames;
+
+          // Calculate start and end frames from the data
+          point.startFrame = Math.min(...point.frameNumbers);
+          point.endFrame = Math.max(...point.frameNumbers);
+
+          // Remove the temporary frameNumbers array
+          delete point.frameNumbers;
+
+          return point;
+        });
+      }
+
+      // Function to create the chart
+      function createChart(timeSeriesData) {
+        console.log("Creating chart with data:", timeSeriesData);
+
+        // Get all frames to set scale domain
+        const allFrames = timeSeriesData.flatMap((d) => d.frames);
+
+        // Chart dimensions and margins
+        const margin = { top: 40, right: 40, bottom: 60, left: 60 };
+        const width = 800 - margin.left - margin.right;
+        const height = 600 - margin.top - margin.bottom;
+
+        // Create SVG
+        const svg = d3
+          .select("#chart")
+          .append("svg")
+          .attr("width", width + margin.left + margin.right)
+          .attr("height", height + margin.top + margin.bottom);
+
+        // Create main group
+        const g = svg
+          .append("g")
+          .attr("transform", `translate(${margin.left},${margin.top})`);
+
+        // Create scales - use all frames to set domain
+        const xScale = d3
+          .scaleLinear()
+          .domain(d3.extent(allFrames, (d) => d.x))
+          .range([0, width])
+          .nice();
+
+        const yScale = d3
+          .scaleLinear()
+          .domain(d3.extent(allFrames, (d) => d.y))
+          .range([height, 0])
+          .nice();
+
+        // Create color scale for categories (cluster IDs) - gradient from dark purple to bright yellow
+        const clusterIds = timeSeriesData
+          .map((d) => parseInt(d.category))
+          .filter((value, index, self) => self.indexOf(value) === index)
+          .sort((a, b) => a - b);
+
+        const minClusterId = Math.min(...clusterIds);
+        const maxClusterId = Math.max(...clusterIds);
+
+        // Custom gradient from dark purple to bright yellow
+        const colorScale = d3
+          .scaleSequential()
+          .domain([minClusterId, maxClusterId])
+          .interpolator(d3.interpolateHcl("#4B0082", "#FFFF00"));
+
+        // Create axes
+        const xAxis = d3.axisBottom(xScale).tickFormat((d) => d);
+
+        const yAxis = d3.axisLeft(yScale).tickFormat((d) => d);
+
+        // Add x-axis
+        g.append("g")
+          .attr("class", "axis")
+          .attr("transform", `translate(0,${height})`)
+          .call(xAxis);
+
+        // Add y-axis
+        g.append("g").attr("class", "axis").call(yAxis);
+
+        // Add axis labels
+        g.append("text")
+          .attr("class", "axis-label")
+          .attr("transform", "rotate(-90)")
+          .attr("y", 0 - margin.left)
+          .attr("x", 0 - height / 2)
+          .attr("dy", "1em")
+          .style("text-anchor", "middle")
+          .text("Y Value");
+
+        g.append("text")
+          .attr("class", "axis-label")
+          .attr(
+            "transform",
+            `translate(${width / 2}, ${height + margin.bottom - 10})`
+          )
+          .style("text-anchor", "middle")
+          .text("X Value");
+
+        // Create tooltip
+        const tooltip = d3.select("#tooltip");
+
+        // Create dots container (will be populated dynamically)
+        let dots = g.selectAll(".dot");
+
+        // Function to get active points at a specific frame
+        function getActivePointsAtFrame(frame) {
+          return timeSeriesData.filter(
+            (d) => frame >= d.startFrame && frame <= d.endFrame
+          );
+        }
+
+        // Function to update points using D3's enter/update/exit pattern
+        function updatePoints(frame) {
+          const activePointsData = getActivePointsAtFrame(frame);
+
+          // Update point counter
+          activePoints.textContent = `Active Comments: ${activePointsData.length}`;
+
+          // Bind data with ID as key function
+          dots = g.selectAll(".dot").data(activePointsData, (d) => d.id);
+
+          // Remove points that are no longer active
+          dots.exit().transition().duration(300).style("opacity", 0).remove();
+
+          // Add new points
+          const newDots = dots
+            .enter()
+            .append("circle")
+            .attr("class", "dot")
+            .attr("r", 2)
+            .style("fill", (d) => colorScale(parseInt(d.category)))
+            .style("opacity", 0)
+            .on("mouseover", function (event, d) {
+              // Highlight the dot
+              d3.select(this)
+                .style("opacity", 1)
+                .style("stroke", "#333")
+                .style("stroke-width", 2);
+
+              // Show tooltip
+              tooltip
+                .style("opacity", 1)
+                .html(
+                  `
+                  <div><strong>Comment ID:</strong> ${d.id}</div>
+                  <div><strong>Cluster ID:</strong> ${d.category}</div>
+                  <div><strong>Body:</strong> ${d.value}</div>
+                  <div><strong>Window:</strong> ${frame}</div>
+                  <div><strong>Lifespan:</strong> ${d.startFrame}-${d.endFrame}</div>
+                `
+                )
+                .style("left", event.pageX + 10 + "px")
+                .style("top", event.pageY - 10 + "px");
+            })
+            .on("mouseout", function () {
+              // Reset the dot
+              d3.select(this)
+                .style("opacity", 0.8)
+                .style("stroke", "none")
+                .style("stroke-width", 0);
+
+              // Hide tooltip
+              tooltip.style("opacity", 0);
+            });
+
+          // Animate new points in
+          newDots.transition().duration(300).style("opacity", 0.8);
+
+          // Update all points (existing + new)
+          dots.merge(newDots).each(function (d) {
+            const frameIndex = frame - d.startFrame;
+            const frameData = d.frames[frameIndex];
+            d3.select(this)
+              .attr("cx", xScale(frameData.x))
+              .attr("cy", yScale(frameData.y));
+          });
+        }
+
+        // Animation variables
+        let currentFrame = 1;
+        let isPlaying = false;
+        let animationDirection = 1; // 1 for forward, -1 for backward
+        let animationSpeed = 200; // milliseconds between frames
+        let animationTimeout;
+        let maxFrame = 509;
+
+        // Get control elements
+        const playPauseBtn = document.getElementById("playPauseBtn");
+        const prevFrameBtn = document.getElementById("prevFrameBtn");
+        const nextFrameBtn = document.getElementById("nextFrameBtn");
+        const frameSlider = document.getElementById("frameSlider");
+        const frameCounter = document.getElementById("frameCounter");
+        const speedSlider = document.getElementById("speedSlider");
+        const speedValue = document.getElementById("speedValue");
+        const activePoints = document.getElementById("activePoints");
+        const frameInput = document.getElementById("frameInput");
+        const jumpBtn = document.getElementById("jumpBtn");
+
+        // Update points to specific frame
+        function updateToFrame(frame) {
+          updatePoints(frame);
+        }
+
+        // Update frame counter display
+        function updateFrameCounter() {
+          frameCounter.textContent = `${currentFrame} / ${maxFrame}`;
+          // Update step button states
+          prevFrameBtn.disabled = currentFrame <= 1;
+          nextFrameBtn.disabled = currentFrame >= maxFrame;
+          // Update frame input
+          frameInput.value = currentFrame;
+        }
+
+        // Update speed display
+        function updateSpeedDisplay() {
+          speedValue.textContent = `${animationSpeed}ms`;
+        }
+
+        // Step functions
+        function stepToPreviousFrame() {
+          if (currentFrame > 1) {
+            currentFrame--;
+            updateToFrame(currentFrame);
+            frameSlider.value = currentFrame;
+            updateFrameCounter();
+          }
+        }
+
+        function stepToNextFrame() {
+          if (currentFrame < maxFrame) {
+            currentFrame++;
+            updateToFrame(currentFrame);
+            frameSlider.value = currentFrame;
+            updateFrameCounter();
+          }
+        }
+
+        // Play/pause functionality
+        function togglePlayPause() {
+          if (isPlaying) {
+            pauseAnimation();
+          } else {
+            playAnimation();
+          }
+        }
+
+        function playAnimation() {
+          isPlaying = true;
+          playPauseBtn.textContent = "Pause";
+          playPauseBtn.classList.add("playing");
+          continueAnimation();
+        }
+
+        function pauseAnimation() {
+          isPlaying = false;
+          playPauseBtn.textContent = "Play";
+          playPauseBtn.classList.remove("playing");
+          if (animationTimeout) {
+            clearTimeout(animationTimeout);
+          }
+        }
+
+        // Continue animation (called recursively when playing)
+        function continueAnimation() {
+          if (!isPlaying) return;
+
+          // Move to next frame
+          currentFrame += animationDirection;
+
+          // Check if we've reached the end or beginning
+          if (currentFrame >= maxFrame) {
+            animationDirection = -1; // Start moving backward
+            currentFrame = maxFrame;
+          } else if (currentFrame <= 1) {
+            animationDirection = 1; // Start moving forward
+            currentFrame = 1;
+          }
+
+          // Update the visualization
+          updateToFrame(currentFrame);
+          frameSlider.value = currentFrame;
+          updateFrameCounter();
+
+          // Schedule next frame
+          animationTimeout = setTimeout(continueAnimation, animationSpeed);
+        }
+
+        // Event listeners
+        playPauseBtn.addEventListener("click", togglePlayPause);
+        prevFrameBtn.addEventListener("click", stepToPreviousFrame);
+        nextFrameBtn.addEventListener("click", stepToNextFrame);
+
+        frameSlider.addEventListener("input", function () {
+          currentFrame = parseInt(this.value);
+          updateToFrame(currentFrame);
+          updateFrameCounter();
+        });
+
+        speedSlider.addEventListener("input", function () {
+          animationSpeed = parseInt(this.value);
+          updateSpeedDisplay();
+        });
+
+        jumpBtn.addEventListener("click", function () {
+          const targetFrame = parseInt(frameInput.value);
+          if (targetFrame >= 1 && targetFrame <= maxFrame) {
+            currentFrame = targetFrame;
+            updateToFrame(currentFrame);
+            frameSlider.value = currentFrame;
+            updateFrameCounter();
+          }
+        });
+
+        frameInput.addEventListener("keypress", function (event) {
+          if (event.key === "Enter") {
+            jumpBtn.click();
+          }
+        });
+
+        // Keyboard controls
+        document.addEventListener("keydown", function (event) {
+          // Only handle arrow keys if no input is focused
+          if (document.activeElement.tagName === "INPUT") return;
+
+          switch (event.key) {
+            case "ArrowLeft":
+              event.preventDefault();
+              stepToPreviousFrame();
+              break;
+            case "ArrowRight":
+              event.preventDefault();
+              stepToNextFrame();
+              break;
+            case " ":
+              event.preventDefault();
+              togglePlayPause();
+              break;
+          }
+        });
+
+        // Initialize display
+        updateToFrame(currentFrame);
+        updateFrameCounter();
+        updateSpeedDisplay();
+
+        // Add legend
+        // const legend = svg
+        //   .append("g")
+        //   .attr(
+        //     "transform",
+        //     `translate(${width + margin.left - 100}, ${margin.top + 20})`
+        //   );
+
+        const categories = timeSeriesData
+          .map((d) => parseInt(d.category))
+          .filter((value, index, self) => self.indexOf(value) === index)
+          .sort((a, b) => a - b);
+        // categories.forEach((category, i) => {
+        //   const legendItem = legend
+        //     .append("g")
+        //     .attr("transform", `translate(0, ${i * 20})`);
+
+        //   legendItem
+        //     .append("circle")
+        //     .attr("r", 5)
+        //     .style("fill", colorScale(category));
+
+        //   legendItem
+        //     .append("text")
+        //     .attr("x", 15)
+        //     .attr("y", 5)
+        //     .style("font-size", "12px")
+        //     .text(`Cluster ${category}`);
+        // });
+
+        // Add title
+        svg
+          .append("text")
+          .attr("x", (width + margin.left + margin.right) / 2)
+          .attr("y", 20)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .style("font-weight", "bold")
+          .text("Comment Clusters Over Time");
+      }
+
+      // Load data and create chart
+      Papa.parse("clustered_comments_2.csv", {
+        download: true,
+        header: true,
+        complete: function (results) {
+          console.log("Parsed data:", results.data);
+          commentData = results.data;
+
+          // Convert the data
+          var timeSeriesData = convertFrameBasedDataToTimeSeries(commentData);
+          console.log("Converted timeSeriesData:", timeSeriesData);
+
+          // Create the chart with the converted data
+          createChart(timeSeriesData);
+        },
+      });
+    </script>
+  </body>
+</html>
