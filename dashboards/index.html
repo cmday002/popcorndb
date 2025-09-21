@@ -536,12 +536,16 @@
               const element = d3.select(this);
 
               // Only highlight if no cluster is selected, or if this dot belongs to the selected cluster
-              if (selectedCluster === null || d.category === selectedCluster) {
+              if (
+                selectedCluster === null ||
+                parseInt(d.category) === selectedCluster
+              ) {
                 element
                   .style("opacity", 1)
                   .style("stroke", "#333")
                   .style("stroke-width", 2);
               }
+              // If a cluster is selected and this dot is not in the selected cluster, don't change opacity
 
               // Show tooltip
               tooltip
@@ -563,14 +567,14 @@
                   .style("opacity", 0.8)
                   .style("stroke", "none")
                   .style("stroke-width", 0);
-              } else if (d.category === selectedCluster) {
+              } else if (parseInt(d.category) === selectedCluster) {
                 // Keep opacity at 1.0 for selected cluster, but remove stroke
                 element
                   .style("opacity", 1.0)
                   .style("stroke", "none")
                   .style("stroke-width", 0);
               }
-              // If cluster is selected and this dot is not in the selected cluster, keep it dimmed
+              // If cluster is selected and this dot is not in the selected cluster, keep it dimmed (don't change opacity)
 
               // Hide tooltip
               tooltip.style("opacity", 0);
@@ -579,8 +583,8 @@
               // Prevent event bubbling
               event.stopPropagation();
 
-              // Select the cluster
-              selectCluster(d.category);
+              // Select the cluster (convert to integer for consistency)
+              selectCluster(parseInt(d.category));
             });
 
           // Note: Selection state is maintained by the click handlers
@@ -986,9 +990,8 @@
         svg.on("click", function (event) {
           // Only reset if clicking on the background, not on dots
           if (event.target === svg.node() || event.target.tagName === "text") {
-            if (selectedCluster !== null) {
-              selectedCluster = null;
-              resetClusterOpacity();
+            if (window.selectedCluster !== null) {
+              window.selectCluster(null);
             }
           }
         });
@@ -1167,7 +1170,7 @@
               // Prevent event bubbling
               event.stopPropagation();
 
-              // Select the cluster
+              // Select the cluster (d.clusterId is already an integer)
               window.selectCluster(d.clusterId);
             });
 
