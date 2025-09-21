@@ -405,6 +405,9 @@
                   .attr("cy", newYScale(frameData.y));
               }
             });
+
+            // Update cluster labels
+            updateClusterLabels(currentFrame, newXScale, newYScale);
           });
 
         // Create color scale for categories (cluster IDs) - gradient from dark purple to bright yellow
@@ -438,6 +441,9 @@
 
         // Create a separate group for dots with clipping
         const dotsGroup = g.append("g").attr("clip-path", "url(#chart-clip)");
+
+        // Create a separate group for cluster labels with clipping
+        const labelsGroup = g.append("g").attr("clip-path", "url(#chart-clip)");
 
         // Apply zoom behavior to the SVG
         svg.call(zoom);
@@ -589,6 +595,12 @@
           if (window.selectedCluster !== null) {
             updateClusterOpacity(window.selectedCluster);
           }
+
+          // Update cluster labels
+          const transform = d3.zoomTransform(svg.node());
+          const currentXScale = transform.rescaleX(xScale);
+          const currentYScale = transform.rescaleY(yScale);
+          updateClusterLabels(frame, currentXScale, currentYScale);
         }
 
         // Animation variables
@@ -613,6 +625,9 @@
             if (window.resetRaceChartOpacity) {
               window.resetRaceChartOpacity();
             }
+            if (window.updateClusterLabelOpacity) {
+              window.updateClusterLabelOpacity();
+            }
           } else {
             // Select new cluster
             selectedCluster = clusterId;
@@ -621,11 +636,17 @@
             if (window.updateRaceChartOpacity) {
               window.updateRaceChartOpacity(clusterId);
             }
+            if (window.updateClusterLabelOpacity) {
+              window.updateClusterLabelOpacity();
+            }
           }
         }
 
         // Make selectCluster globally accessible
         window.selectCluster = selectCluster;
+
+        // Make updateClusterLabelOpacity globally accessible
+        window.updateClusterLabelOpacity = updateClusterLabelOpacity;
 
         // Function to update opacity based on selected cluster
         function updateClusterOpacity(selectedClusterId) {
@@ -652,6 +673,111 @@
             const d3Element = d3.select(circleElement);
             d3Element.style("opacity", 0.8);
           });
+        }
+
+        // Function to update cluster label opacity based on selection
+        function updateClusterLabelOpacity() {
+          const labels = labelsGroup.selectAll(".cluster-label");
+          labels.style("opacity", function (d) {
+            // If a cluster is selected, only show the selected cluster's label at full opacity
+            if (window.selectedCluster !== null) {
+              return d.clusterId === window.selectedCluster ? 1.0 : 0.3;
+            }
+            return 1.0; // Show all labels when no selection
+          });
+        }
+
+        // Function to update cluster labels based on zoom level
+        function updateClusterLabels(frame, currentXScale, currentYScale) {
+          // Get current zoom level
+          const transform = d3.zoomTransform(svg.node());
+          const zoomLevel = transform.k;
+
+          // Only show labels when all the way zoomed in (scale > 8)
+          if (zoomLevel < 8) {
+            labelsGroup.selectAll(".cluster-label").remove();
+            return;
+          }
+
+          // Get active points for this frame
+          const activePoints = timeSeriesData.filter(
+            (d) => frame >= d.startFrame && frame <= d.endFrame
+          );
+
+          // Group points by cluster
+          const clusterGroups = {};
+          activePoints.forEach((point) => {
+            const clusterId = parseInt(point.category);
+            if (!clusterGroups[clusterId]) {
+              clusterGroups[clusterId] = [];
+            }
+            clusterGroups[clusterId].push(point);
+          });
+
+          // Create labels for each cluster (positioned at first point)
+          // Only show labels for clusters with more than 10 comments
+          const labelData = Object.entries(clusterGroups)
+            .filter(([clusterId, points]) => points.length > 10) // Filter clusters with >10 comments
+            .map(([clusterId, points]) => {
+              const firstPoint = points[0];
+              const frameIndex = frame - firstPoint.startFrame;
+              if (frameIndex >= 0 && frameIndex < firstPoint.frames.length) {
+                const frameData = firstPoint.frames[frameIndex];
+                return {
+                  clusterId: parseInt(clusterId),
+                  clusterLabel:
+                    firstPoint.clusterLabels[frameIndex] ||
+                    `Cluster ${clusterId}`,
+                  x: frameData.x,
+                  y: frameData.y,
+                };
+              }
+              return null;
+            })
+            .filter((d) => d !== null);
+
+          // Update labels
+          const labels = labelsGroup
+            .selectAll(".cluster-label")
+            .data(labelData, (d) => d.clusterId);
+
+          labels.exit().remove();
+
+          const newLabels = labels
+            .enter()
+            .append("text")
+            .attr("class", "cluster-label")
+            .attr("text-anchor", "middle")
+            .attr("dominant-baseline", "middle")
+            .attr("x", (d) => currentXScale(d.x))
+            .attr("y", (d) => currentYScale(d.y) - 25) // Position above the point
+            .style("font-size", "14px")
+            .style("font-weight", "bold")
+            .style("fill", "#666")
+            .style("pointer-events", "none")
+            .style("opacity", 0);
+
+          labels
+            .merge(newLabels)
+            .text((d) => d.clusterLabel)
+            .attr("x", (d) => currentXScale(d.x))
+            .attr("y", (d) => currentYScale(d.y) - 25) // Position above the point
+            .style("opacity", function (d) {
+              // Apply selection-based opacity immediately when labels are created
+              if (window.selectedCluster !== null) {
+                return d.clusterId === window.selectedCluster ? 1.0 : 0.3;
+              }
+              return 1.0; // Show all labels when no selection
+            })
+            .transition()
+            .duration(200)
+            .style("opacity", function (d) {
+              // Maintain selection-based opacity after transition
+              if (window.selectedCluster !== null) {
+                return d.clusterId === window.selectedCluster ? 1.0 : 0.3;
+              }
+              return 1.0;
+            });
         }
 
         // Get control elements
