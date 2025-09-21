@@ -248,6 +248,9 @@
       </div>
 
       <div id="chart"></div>
+
+      <!-- Race Chart -->
+      <div id="race-chart"></div>
     </div>
     <div id="tooltip"></div>
 
@@ -555,6 +558,11 @@
 
           // Note: Selection state is maintained by the click handlers
           // No need to update opacity here as it's handled by user interaction
+
+          // Update race chart if it exists
+          if (window.updateRaceChart) {
+            window.updateRaceChart(frame);
+          }
         }
 
         // Animation variables
@@ -817,6 +825,231 @@
         });
       }
 
+      // Function to create race chart
+      function createRaceChart(timeSeriesData) {
+        const raceMargin = { top: 20, right: 100, bottom: 50, left: 100 };
+        const raceWidth = 800 - raceMargin.left - raceMargin.right;
+        const raceHeight = 400 - raceMargin.top - raceMargin.bottom;
+
+        // Create SVG for race chart
+        const raceSvg = d3
+          .select("#race-chart")
+          .append("svg")
+          .attr("width", raceWidth + raceMargin.left + raceMargin.right)
+          .attr("height", raceHeight + raceMargin.top + raceMargin.bottom);
+
+        const raceG = raceSvg
+          .append("g")
+          .attr("transform", `translate(${raceMargin.left},${raceMargin.top})`);
+
+        // Get all unique cluster IDs
+        const clusterIds = timeSeriesData
+          .map((d) => parseInt(d.category))
+          .filter((value, index, self) => self.indexOf(value) === index)
+          .sort((a, b) => a - b);
+
+        // Create color scale for clusters
+        const raceColorScale = d3
+          .scaleSequential()
+          .domain([0, clusterIds.length - 1])
+          .interpolator(d3.interpolateHcl("#4B0082", "#FFFF00"));
+
+        // Function to get comment counts by cluster for a specific frame
+        function getCommentCountsByCluster(frame) {
+          const activePoints = timeSeriesData.filter(
+            (d) => frame >= d.startFrame && frame <= d.endFrame
+          );
+
+          const counts = {};
+          clusterIds.forEach((id) => (counts[id] = 0));
+
+          // Count unique comments (not frame entries)
+          const uniqueComments = new Set();
+          activePoints.forEach((point) => {
+            const commentKey = `${point.id}-${point.category}`;
+            if (!uniqueComments.has(commentKey)) {
+              uniqueComments.add(commentKey);
+              counts[parseInt(point.category)]++;
+            }
+          });
+
+          return Object.entries(counts)
+            .map(([clusterId, count]) => ({
+              clusterId: parseInt(clusterId),
+              count: count,
+              color: raceColorScale(clusterIds.indexOf(parseInt(clusterId))),
+            }))
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 10); // Show top 10 clusters
+        }
+
+        // Create scales
+        const raceXScale = d3
+          .scaleLinear()
+          .domain([0, 1])
+          .range([0, raceWidth]);
+        const raceYScale = d3.scaleBand().range([0, raceHeight]).padding(0.1);
+
+        // Calculate global maximum count across all frames for consistent scaling
+        function calculateGlobalMaxCount() {
+          let maxCount = 0;
+          for (let frame = 1; frame <= 509; frame++) {
+            const data = getCommentCountsByCluster(frame);
+            const currentMax = d3.max(data, (d) => d.count);
+            if (currentMax > maxCount) {
+              maxCount = currentMax;
+            }
+          }
+          return maxCount;
+        }
+
+        const globalMaxCount = calculateGlobalMaxCount();
+        console.log("Global max count across all frames:", globalMaxCount);
+
+        // Create bars container
+        const barsGroup = raceG.append("g");
+
+        // Function to update race chart
+        function updateRaceChart(frame) {
+          const data = getCommentCountsByCluster(frame);
+          console.log("Race chart data for frame", frame, ":", data);
+
+          // Update scales with consistent domain
+          raceXScale.domain([0, globalMaxCount]);
+          raceYScale.domain(data.map((d) => d.clusterId));
+
+          // Update x-axis to reflect new domain
+          raceG.select(".race-x-axis").call(d3.axisBottom(raceXScale));
+
+          // Update bars
+          const bars = barsGroup
+            .selectAll(".race-bar")
+            .data(data, (d) => d.clusterId);
+
+          // Remove old bars
+          bars.exit().transition().duration(300).style("opacity", 0).remove();
+
+          // Add new bars
+          const newBars = bars
+            .enter()
+            .append("rect")
+            .attr("class", "race-bar")
+            .attr("x", 0)
+            .attr("y", (d) => raceYScale(d.clusterId))
+            .attr("width", 0) // Start with 0 width
+            .attr("height", raceYScale.bandwidth())
+            .attr("fill", (d) => d.color)
+            .attr("opacity", 0.8);
+
+          // Update all bars (existing + new)
+          bars
+            .merge(newBars)
+            .transition()
+            .duration(300)
+            .attr("x", 0)
+            .attr("y", (d) => raceYScale(d.clusterId))
+            .attr("width", (d) => {
+              const width = raceXScale(d.count);
+              console.log(
+                `Cluster ${d.clusterId}: count=${d.count}, width=${width}`
+              );
+              return width;
+            });
+
+          // Update labels
+          const labels = barsGroup
+            .selectAll(".race-label")
+            .data(data, (d) => d.clusterId);
+
+          labels.exit().transition().duration(300).style("opacity", 0).remove();
+
+          const newLabels = labels
+            .enter()
+            .append("text")
+            .attr("class", "race-label")
+            .attr("x", -10)
+            .attr("text-anchor", "end")
+            .attr("dominant-baseline", "middle")
+            .style("font-size", "12px")
+            .style("fill", "#333")
+            .style("opacity", 0);
+
+          labels
+            .merge(newLabels)
+            .text((d) => `Cluster ${d.clusterId}`)
+            .transition()
+            .duration(300)
+            .style("opacity", 1)
+            .attr(
+              "y",
+              (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+            );
+
+          // Update count labels
+          const countLabels = barsGroup
+            .selectAll(".count-label")
+            .data(data, (d) => d.clusterId);
+
+          countLabels
+            .exit()
+            .transition()
+            .duration(300)
+            .style("opacity", 0)
+            .remove();
+
+          const newCountLabels = countLabels
+            .enter()
+            .append("text")
+            .attr("class", "count-label")
+            .attr("text-anchor", "start")
+            .attr("dominant-baseline", "middle")
+            .style("font-size", "11px")
+            .style("fill", "#333")
+            .style("font-weight", "bold")
+            .style("opacity", 0);
+
+          countLabels
+            .merge(newCountLabels)
+            .text((d) => d.count)
+            .transition()
+            .duration(300)
+            .style("opacity", 1)
+            .attr("x", (d) => raceXScale(d.count) + 5)
+            .attr(
+              "y",
+              (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+            );
+        }
+
+        // Add axes
+        raceG
+          .append("g")
+          .attr("class", "race-x-axis")
+          .attr("transform", `translate(0,${raceHeight})`)
+          .call(d3.axisBottom(raceXScale));
+
+        raceG
+          .append("g")
+          .attr("class", "race-y-axis")
+          .call(d3.axisLeft(raceYScale));
+
+        // Add title
+        raceG
+          .append("text")
+          .attr("x", raceWidth / 2)
+          .attr("y", -5)
+          .attr("text-anchor", "middle")
+          .style("font-size", "16px")
+          .style("font-weight", "bold")
+          .text("Comments by Cluster");
+
+        // Initial update
+        updateRaceChart(1);
+
+        // Return update function
+        return updateRaceChart;
+      }
+
       // Load data and create chart
       Papa.parse("data/comments.csv", {
         download: true,
@@ -829,8 +1062,12 @@
           var timeSeriesData = convertFrameBasedDataToTimeSeries(commentData);
           console.log("Converted timeSeriesData:", timeSeriesData);
 
-          // Create the chart with the converted data
+          // Create both charts
           createChart(timeSeriesData);
+          const updateRaceChart = createRaceChart(timeSeriesData);
+
+          // Store race chart update function globally so controls can access it
+          window.updateRaceChart = updateRaceChart;
         },
       });
     </script>
