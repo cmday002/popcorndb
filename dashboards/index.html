@@ -611,6 +611,9 @@
         let animationTimeout;
         let maxFrame = 509;
 
+        // Store animation speed globally for race chart
+        window.animationSpeed = animationSpeed;
+
         // Cluster selection variables
         let selectedCluster = null;
         window.selectedCluster = selectedCluster;
@@ -894,6 +897,7 @@
 
         speedSlider.addEventListener("input", function () {
           animationSpeed = parseInt(this.value);
+          window.animationSpeed = animationSpeed; // Store globally for race chart
           updateSpeedDisplay();
         });
 
@@ -1121,13 +1125,28 @@
           // Update x-axis to reflect new domain
           raceG.select(".race-x-axis").call(d3.axisBottom(raceXScale));
 
+          // Calculate transition duration based on animation speed
+          // Use a shorter duration than the frame rate to prevent conflicts
+          const animationSpeed = window.animationSpeed || 200;
+          const transitionDuration =
+            animationSpeed < 100 ? 0 : Math.min(150, animationSpeed * 0.6); // Instant for very fast speeds, 60% of frame rate otherwise, max 150ms
+
           // Update bars
           const bars = barsGroup
             .selectAll(".race-bar")
             .data(data, (d) => d.clusterId);
 
           // Remove old bars
-          bars.exit().transition().duration(300).style("opacity", 0).remove();
+          if (transitionDuration > 0) {
+            bars
+              .exit()
+              .transition()
+              .duration(transitionDuration)
+              .style("opacity", 0)
+              .remove();
+          } else {
+            bars.exit().remove();
+          }
 
           // Add new bars
           const newBars = bars
@@ -1142,7 +1161,7 @@
             .attr("opacity", 0.8);
 
           // Update all bars (existing + new)
-          bars
+          const barsToUpdate = bars
             .merge(newBars)
             .on("click", function (event, d) {
               // Prevent event bubbling
@@ -1150,25 +1169,49 @@
 
               // Select the cluster
               window.selectCluster(d.clusterId);
-            })
-            .transition()
-            .duration(300)
-            .attr("x", 0)
-            .attr("y", (d) => raceYScale(d.clusterId))
-            .attr("width", (d) => {
-              const width = raceXScale(d.count);
-              console.log(
-                `Cluster ${d.clusterId}: count=${d.count}, width=${width}`
-              );
-              return width;
             });
+
+          if (transitionDuration > 0) {
+            barsToUpdate
+              .transition()
+              .duration(transitionDuration)
+              .attr("x", 0)
+              .attr("y", (d) => raceYScale(d.clusterId))
+              .attr("width", (d) => {
+                const width = raceXScale(d.count);
+                console.log(
+                  `Cluster ${d.clusterId}: count=${d.count}, width=${width}`
+                );
+                return width;
+              });
+          } else {
+            barsToUpdate
+              .attr("x", 0)
+              .attr("y", (d) => raceYScale(d.clusterId))
+              .attr("width", (d) => {
+                const width = raceXScale(d.count);
+                console.log(
+                  `Cluster ${d.clusterId}: count=${d.count}, width=${width}`
+                );
+                return width;
+              });
+          }
 
           // Update labels
           const labels = barsGroup
             .selectAll(".race-label")
             .data(data, (d) => d.clusterId);
 
-          labels.exit().transition().duration(300).style("opacity", 0).remove();
+          if (transitionDuration > 0) {
+            labels
+              .exit()
+              .transition()
+              .duration(transitionDuration)
+              .style("opacity", 0)
+              .remove();
+          } else {
+            labels.exit().remove();
+          }
 
           const newLabels = labels
             .enter()
@@ -1181,28 +1224,43 @@
             .style("fill", "#333")
             .style("opacity", 0);
 
-          labels
+          const labelsToUpdate = labels
             .merge(newLabels)
-            .text((d) => d.clusterLabel)
-            .transition()
-            .duration(300)
-            .style("opacity", 1)
-            .attr(
-              "y",
-              (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
-            );
+            .text((d) => d.clusterLabel);
+
+          if (transitionDuration > 0) {
+            labelsToUpdate
+              .transition()
+              .duration(transitionDuration)
+              .style("opacity", 1)
+              .attr(
+                "y",
+                (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+              );
+          } else {
+            labelsToUpdate
+              .style("opacity", 1)
+              .attr(
+                "y",
+                (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+              );
+          }
 
           // Update count labels
           const countLabels = barsGroup
             .selectAll(".count-label")
             .data(data, (d) => d.clusterId);
 
-          countLabels
-            .exit()
-            .transition()
-            .duration(300)
-            .style("opacity", 0)
-            .remove();
+          if (transitionDuration > 0) {
+            countLabels
+              .exit()
+              .transition()
+              .duration(transitionDuration)
+              .style("opacity", 0)
+              .remove();
+          } else {
+            countLabels.exit().remove();
+          }
 
           const newCountLabels = countLabels
             .enter()
@@ -1215,17 +1273,29 @@
             .style("font-weight", "bold")
             .style("opacity", 0);
 
-          countLabels
+          const countLabelsToUpdate = countLabels
             .merge(newCountLabels)
-            .text((d) => d.count)
-            .transition()
-            .duration(300)
-            .style("opacity", 1)
-            .attr("x", (d) => raceXScale(d.count) + 5)
-            .attr(
-              "y",
-              (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
-            );
+            .text((d) => d.count);
+
+          if (transitionDuration > 0) {
+            countLabelsToUpdate
+              .transition()
+              .duration(transitionDuration)
+              .style("opacity", 1)
+              .attr("x", (d) => raceXScale(d.count) + 5)
+              .attr(
+                "y",
+                (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+              );
+          } else {
+            countLabelsToUpdate
+              .style("opacity", 1)
+              .attr("x", (d) => raceXScale(d.count) + 5)
+              .attr(
+                "y",
+                (d) => raceYScale(d.clusterId) + raceYScale.bandwidth() / 2
+              );
+          }
 
           // Apply current cluster selection state to new bars
           if (window.selectedCluster !== null) {
