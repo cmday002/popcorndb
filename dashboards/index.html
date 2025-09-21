@@ -288,6 +288,7 @@
               value: item.body,
               frames: [],
               frameNumbers: [], // Track which frames this point appears in
+              clusterLabels: [], // Track cluster labels for each frame
             };
           }
 
@@ -299,6 +300,9 @@
 
           // Track frame numbers
           groupedData[pointId].frameNumbers.push(parseInt(item.window_id));
+
+          // Track cluster labels for each frame
+          groupedData[pointId].clusterLabels.push(item.cluster_label);
         });
 
         // Convert to array and calculate start/end frames
@@ -313,6 +317,12 @@
             (item) => point.frames[item.index]
           );
           point.frames = sortedFrames;
+
+          // Reorder cluster labels array based on sorted frame numbers
+          const sortedLabels = sortedIndices.map(
+            (item) => point.clusterLabels[item.index]
+          );
+          point.clusterLabels = sortedLabels;
 
           // Calculate start and end frames from the data
           point.startFrame = Math.min(...point.frameNumbers);
@@ -856,7 +866,7 @@
 
       // Function to create race chart
       function createRaceChart(timeSeriesData) {
-        const raceMargin = { top: 20, right: 100, bottom: 50, left: 100 };
+        const raceMargin = { top: 20, right: 100, bottom: 50, left: 150 };
         const raceWidth = 800 - raceMargin.left - raceMargin.right;
         const raceHeight = 400 - raceMargin.top - raceMargin.bottom;
 
@@ -890,21 +900,31 @@
           );
 
           const counts = {};
+          const clusterLabels = {}; // Track labels for each cluster
           clusterIds.forEach((id) => (counts[id] = 0));
 
-          // Count unique comments (not frame entries)
+          // Count unique comments (not frame entries) and collect labels
           const uniqueComments = new Set();
           activePoints.forEach((point) => {
             const commentKey = `${point.id}-${point.category}`;
             if (!uniqueComments.has(commentKey)) {
               uniqueComments.add(commentKey);
-              counts[parseInt(point.category)]++;
+              const clusterId = parseInt(point.category);
+              counts[clusterId]++;
+
+              // Get the cluster label for this frame
+              const frameIndex = frame - point.startFrame;
+              if (frameIndex >= 0 && frameIndex < point.clusterLabels.length) {
+                clusterLabels[clusterId] = point.clusterLabels[frameIndex];
+              }
             }
           });
 
           return Object.entries(counts)
             .map(([clusterId, count]) => ({
               clusterId: parseInt(clusterId),
+              clusterLabel:
+                clusterLabels[parseInt(clusterId)] || `Cluster ${clusterId}`,
               count: count,
               color: raceColorScale(clusterIds.indexOf(parseInt(clusterId))),
             }))
@@ -1037,7 +1057,7 @@
 
           labels
             .merge(newLabels)
-            .text((d) => `Cluster ${d.clusterId}`)
+            .text((d) => d.clusterLabel)
             .transition()
             .duration(300)
             .style("opacity", 1)
